@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate action.yml
+        run: |
+          # Ensure action.yml is valid
+          python3 -c "import yaml; yaml.safe_load(open('action.yml'))"
+          echo "✓ action.yml is valid YAML"
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: HAIEC Scan Action v${{ steps.version.outputs.version }}
+          body: |
+            ## HAIEC Scan Action v${{ steps.version.outputs.version }}
+            
+            Deterministic AI security scanning with AST analysis, policy gates, and SARIF export.
+            
+            ### Usage
+            
+            ```yaml
+            - uses: haiec/scan-action@v${{ steps.version.outputs.version }}
+              with:
+                fail-on-critical: 'true'
+            ```
+            
+            ### Changes
+            
+            See [CHANGELOG.md](CHANGELOG.md) for details.
+            
+            ### Verification
+            
+            ```bash
+            # Verify release integrity
+            git clone https://github.com/haiec/scan-action.git
+            cd scan-action
+            git checkout v${{ steps.version.outputs.version }}
+            sha256sum action.yml
+            ```
+          draft: false
+          prerelease: false
+
+  update-major-tag:
+    name: Update Major Tag
+    runs-on: ubuntu-latest
+    needs: release
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Update v1 tag
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Delete existing major tag if it exists
+          git tag -d $MAJOR 2>/dev/null || true
+          git push origin :refs/tags/$MAJOR 2>/dev/null || true
+          
+          # Create new major tag pointing to this release
+          git tag $MAJOR
+          git push origin $MAJOR
+          
+          echo "Updated $MAJOR tag to point to $VERSION"

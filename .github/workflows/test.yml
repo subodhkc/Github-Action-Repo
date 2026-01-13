@@ -1,0 +1,40 @@
+name: Test Action
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-action:
+    name: Test Action
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate action.yml
+        run: |
+          python3 -c "import yaml; yaml.safe_load(open('action.yml'))"
+          echo "action.yml is valid YAML"
+
+      - name: Test action locally
+        uses: ./
+        id: test
+        with:
+          fail-on-critical: 'false'
+          upload-sarif: 'false'
+
+      - name: Verify outputs
+        run: |
+          echo "Status: ${{ steps.test.outputs.status }}"
+          echo "Exit code: ${{ steps.test.outputs.exit-code }}"
+          
+          if [ -z "${{ steps.test.outputs.status }}" ]; then
+            echo "ERROR: No status output"
+            exit 1
+          fi
+          
+          echo "Action test passed"
