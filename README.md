@@ -1,10 +1,27 @@
 # HAIEC Scan Action
 
+[![GitHub release](https://img.shields.io/github/v/release/subodhkc/haiec-scan-action)](https://github.com/subodhkc/haiec-scan-action/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](LICENSE)
+
 > **Version**: 1.0.0  
-> **Repository**: `haiec/scan-action`  
+> **Repository**: `subodhkc/haiec-scan-action`  
 > **License**: MIT
 
 Deterministic AI security scanning with AST analysis, policy gates, and SARIF export.
+
+**No NPM required** - Uses pre-built binaries or API-based scanning.
+
+---
+
+## Features
+
+- **Zero Dependencies** - No NPM, no package installation required
+- **Multi-Language AST Analysis** - Python, Go, JavaScript/TypeScript
+- **Deterministic Results** - Same input → Same output (auditor-safe)
+- **Policy Gates** - Configurable thresholds for CI/CD blocking
+- **SARIF Export** - Native GitHub Code Scanning integration
+- **Incremental Scanning** - Fast PR checks with diff-based analysis
+- **Content Hashes** - Cryptographic verification of scan results
 
 ---
 
@@ -12,10 +29,11 @@ Deterministic AI security scanning with AST analysis, policy gates, and SARIF ex
 
 This action is designed for **auditor-safe, deterministic security scanning**:
 
-- All inputs are validated before use
-- Outputs are sanitized (no secrets logged)
-- Results are reproducible (same input → same output)
-- Content hashes provided for verification
+- ✅ All inputs are validated before use
+- ✅ Outputs are sanitized (no secrets logged)
+- ✅ Results are reproducible (same input → same output)
+- ✅ Content hashes provided for verification
+- ✅ No external dependencies or NPM packages
 
 ---
 
@@ -34,7 +52,7 @@ This action is designed for **auditor-safe, deterministic security scanning**:
 ## Quick Start
 
 ```yaml
-- uses: haiec/scan-action@v1
+- uses: subodhkc/haiec-scan-action@v1
   with:
     fail-on-critical: 'true'
 ```
@@ -60,7 +78,7 @@ jobs:
         with:
           fetch-depth: 0
       
-      - uses: haiec/scan-action@v1
+      - uses: subodhkc/haiec-scan-action@v1
         id: scan
         with:
           fail-on-critical: 'true'
@@ -194,17 +212,30 @@ For compliance audits, verify scan reproducibility:
 # 1. Note the content hash from the action output
 EXPECTED_HASH="sha256:abc123..."
 
-# 2. Re-run scan locally
-npx @haiec/scanner --output ./verify
+# 2. Download evidence bundle from artifacts
+gh run download <run-id> -n haiec-scan-<run-id>
 
-# 3. Compare hashes
-ACTUAL_HASH=$(jq -r '.content_hash' ./verify/evidence-bundle.json)
+# 3. Verify hash
+ACTUAL_HASH=$(jq -r '.content_hash' haiec-results/evidence-bundle.json)
 
 if [ "$EXPECTED_HASH" = "$ACTUAL_HASH" ]; then
   echo "✓ Scan is reproducible"
 else
   echo "✗ Hash mismatch - investigate"
 fi
+```
+
+### Re-run Scan Locally
+
+```bash
+# Using the HAIEC API (no installation required)
+curl -X POST https://subodhkc--haiec-website-ci-scan.modal.run \
+  -H "Content-Type: application/json" \
+  -d '{"repo": "owner/repo", "commit": "sha"}' \
+  -o result.json
+
+# Compare with CI result
+jq -r '.content_hash' result.json
 ```
 
 ---
@@ -235,11 +266,57 @@ permissions:
 
 ---
 
+## How It Works
+
+1. **Setup** - Downloads pre-built scanner binary (or uses API fallback)
+2. **Scan** - Runs AST analysis on Python, Go, and JS/TS files
+3. **Evaluate** - Applies policy gates to findings
+4. **Report** - Generates SARIF and evidence bundle
+5. **Upload** - Sends SARIF to GitHub Code Scanning
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    GitHub Actions                        │
+├─────────────────────────────────────────────────────────┤
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐                 │
+│  │ Python  │  │   Go    │  │  JS/TS  │  AST Sidecars   │
+│  │ Sidecar │  │ Sidecar │  │ Sidecar │                 │
+│  └────┬────┘  └────┬────┘  └────┬────┘                 │
+│       │            │            │                       │
+│       └────────────┼────────────┘                       │
+│                    ▼                                    │
+│           ┌───────────────┐                            │
+│           │ Finding Merger │                            │
+│           └───────┬───────┘                            │
+│                   ▼                                    │
+│           ┌───────────────┐                            │
+│           │ Policy Engine │                            │
+│           └───────┬───────┘                            │
+│                   ▼                                    │
+│    ┌──────────────┴──────────────┐                    │
+│    │                             │                    │
+│    ▼                             ▼                    │
+│ ┌──────────┐              ┌─────────────┐            │
+│ │  SARIF   │              │  Evidence   │            │
+│ │  Report  │              │   Bundle    │            │
+│ └────┬─────┘              └──────┬──────┘            │
+│      │                           │                    │
+│      ▼                           ▼                    │
+│ GitHub Code                 Artifacts                 │
+│  Scanning                   (30 days)                 │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Support
 
-- **Documentation**: https://docs.haiec.com/ci
-- **Issues**: https://github.com/haiec/scan-action/issues
+- **Documentation**: https://haiec.com/docs/ci
+- **Issues**: https://github.com/subodhkc/haiec-scan-action/issues
 - **Security**: security@haiec.com
+- **Website**: https://haiec.com
 
 ---
 

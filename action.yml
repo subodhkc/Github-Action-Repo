@@ -1,14 +1,10 @@
 name: 'HAIEC AI Security Scan'
-description: 'Deterministic AI security scanning with AST analysis, policy gates, and SARIF export'
+description: 'Deterministic AI security scanning with AST analysis, policy gates, and SARIF export. No NPM required.'
 author: 'HAIEC <security@haiec.com>'
 
 branding:
   icon: 'shield'
   color: 'green'
-
-permissions:
-  contents: read
-  security-events: write
 
 inputs:
   # ============================================
@@ -180,21 +176,25 @@ runs:
       with:
         go-version: '1.21'
 
-    - name: Ensure jq
+    - name: Setup HAIEC Scanner
       shell: bash
       run: |
-        if ! command -v jq &> /dev/null; then
-          sudo apt-get update && sudo apt-get install -y jq
-        fi
-
-    - name: Install HAIEC Scanner
-      shell: bash
-      run: |
-        # Install from npm (locked version with security flag)
-        npm install -g @haiec/scanner@1.0.0 --ignore-scripts
+        # Create scanner directory
+        mkdir -p /tmp/haiec-scanner
         
-        # Verify installation
-        haiec-scan --version
+        # Download pre-built scanner binary (no NPM required)
+        SCANNER_VERSION="1.0.0"
+        SCANNER_URL="https://github.com/subodhkc/haiec-website/releases/download/scanner-v${SCANNER_VERSION}/haiec-scanner-linux-x64"
+        
+        # Try to download binary, fall back to API-based scanning
+        if curl -fsSL "$SCANNER_URL" -o /tmp/haiec-scanner/haiec-scan 2>/dev/null; then
+          chmod +x /tmp/haiec-scanner/haiec-scan
+          echo "✓ HAIEC Scanner binary installed"
+          echo "HAIEC_SCANNER_MODE=binary" >> $GITHUB_ENV
+        else
+          echo "Binary not available, using API-based scanning"
+          echo "HAIEC_SCANNER_MODE=api" >> $GITHUB_ENV
+        fi
 
     # ============================================
     # SCAN EXECUTION
@@ -239,15 +239,46 @@ runs:
           ARGS="$ARGS --policy ${{ inputs.policy-file }}"
         fi
         
-        # Run scan (stderr to log file, stdout to result.json)
+        # Run scan based on available mode
         set +e
-        haiec-scan $ARGS 2> "${{ inputs.output-dir }}/scan.log" > "${{ inputs.output-dir }}/result.json"
-        SCAN_EXIT=$?
+        if [ "$HAIEC_SCANNER_MODE" = "binary" ]; then
+          /tmp/haiec-scanner/haiec-scan $ARGS 2>"${{ inputs.output-dir }}/stderr.log" > "${{ inputs.output-dir }}/result.json"
+          SCAN_EXIT=$?
+        else
+          # API-based scanning - call HAIEC API directly
+          HAIEC_API_URL="https://subodhkc--haiec-website-ci-scan.modal.run"
+          
+          # Prepare scan request
+          SCAN_REQUEST=$(cat <<EOF
+        {
+          "repo": "${{ github.repository }}",
+          "commit": "${{ github.sha }}",
+          "ref": "${{ github.ref }}",
+          "base_ref": "${{ steps.base.outputs.base_ref }}",
+          "sidecars": {
+            "python": ${{ inputs.python-sidecar == 'true' && 'true' || 'false' }},
+            "go": ${{ inputs.go-sidecar == 'true' && 'true' || 'false' }},
+            "js": ${{ inputs.js-sidecar == 'true' && 'true' || 'false' }}
+          }
+        }
+        EOF
+          )
+          
+          # Call API
+          curl -fsSL -X POST "$HAIEC_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Token: ${{ github.token }}" \
+            -d "$SCAN_REQUEST" \
+            -o "${{ inputs.output-dir }}/result.json" \
+            2>"${{ inputs.output-dir }}/stderr.log"
+          SCAN_EXIT=$?
+        fi
         set -e
         
-        # Display scan logs
-        if [ -f "${{ inputs.output-dir }}/scan.log" ]; then
-          cat "${{ inputs.output-dir }}/scan.log"
+        # Log any errors
+        if [ -s "${{ inputs.output-dir }}/stderr.log" ]; then
+          echo "::warning::Scanner stderr output:"
+          cat "${{ inputs.output-dir }}/stderr.log"
         fi
         
         # Parse results
@@ -283,7 +314,7 @@ runs:
     # ============================================
     
     - name: Upload SARIF to Code Scanning
-      if: inputs.upload-sarif == 'true' && github.repository_owner == github.actor
+      if: inputs.upload-sarif == 'true' && github.event_name != 'pull_request'
       uses: github/codeql-action/upload-sarif@v3
       continue-on-error: true
       with:

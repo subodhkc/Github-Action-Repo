@@ -51,29 +51,6 @@ All inputs are validated:
 - Paths sanitized
 - Timeouts bounded
 
-### Dependency Installation
-
-The action installs the HAIEC scanner from npm with security hardening:
-
-```bash
-npm install -g @haiec/scanner@1.0.0 --ignore-scripts
-```
-
-**Rationale:**
-- `--ignore-scripts` prevents arbitrary code execution during install
-- Version is pinned to prevent supply-chain attacks
-- Future versions may bundle the scanner in `dist/` to eliminate runtime installs
-
-**Trade-offs:**
-- Requires npm registry availability at runtime
-- Global install creates mutable PATH dependency
-- Auditors should verify package integrity via npm audit
-
-**Alternatives considered:**
-- Bundle scanner in repo (increases repo size, better security)
-- Use npm ci with lockfile (requires maintaining package-lock.json)
-- Checksum verification (adds complexity, minimal benefit with --ignore-scripts)
-
 ### Audit Trail
 
 Every scan produces:
