@@ -17,6 +17,8 @@ Deterministic AI security scanning with AST analysis, policy gates, and SARIF ex
 
 - **Zero Dependencies** - No NPM, no package installation required
 - **Multi-Language AST Analysis** - Python, Go, JavaScript/TypeScript
+- **Smart Sidecar Detection** - Automatically skips sidecars when no applicable files exist
+- **No False Failures** - Repos without Go/Python/JS files pass cleanly
 - **Deterministic Results** - Same input → Same output (auditor-safe)
 - **Policy Gates** - Configurable thresholds for CI/CD blocking
 - **SARIF Export** - Native GitHub Code Scanning integration
@@ -50,6 +52,14 @@ This action is designed for **auditor-safe, deterministic security scanning**:
 ---
 
 ## Quick Start
+
+### For Managers (No Coding Required)
+
+**New to GitHub Actions?** See our [Manager's Quick Start Guide](docs/QUICK_START_FOR_MANAGERS.md) - a step-by-step walkthrough with screenshots for non-developers.
+
+**Copy-paste template**: Download [security.yml](docs/templates/security.yml) and add it to your repo's `.github/workflows/` folder.
+
+### For Developers
 
 ```yaml
 - uses: subodhkc/haiec-scan-action@v1
@@ -186,9 +196,39 @@ Create `.haiec/policy.json`:
 |---------|-------------|--------|
 | `critical-findings` | Limit critical findings | `maxCritical` |
 | `high-findings` | Limit high findings | `maxHigh` |
-| `sidecar-success` | Sidecar success rate | `minSuccessRate` |
+| `sidecar-success` | Sidecar success rate (skipped excluded) | `minSuccessRate` |
+| `degradation-level` | Scan degradation (skipped excluded) | `allowFallback` |
 | `ast-coverage` | AST coverage % | `minAstPercentage` |
 | `no-new-findings` | Block new findings | `maxNew` |
+
+---
+
+## Sidecar States
+
+Each language sidecar can be in one of three states:
+
+| State | Icon | Description |
+|-------|------|-------------|
+| `SUCCESS` | ✓ | Sidecar ran and completed successfully |
+| `FAILED` | ✗ | Sidecar ran but encountered an error |
+| `SKIPPED` | ⏭ | Sidecar was not run (no applicable files) |
+
+**Key Behavior**: Skipped sidecars are excluded from policy gate calculations. A repository with no Go/Python/JS files will pass cleanly instead of failing due to "missing" sidecars.
+
+### Example Output
+
+```
+────────────────────────────────────────
+HAIEC AI Security Scan Summary
+────────────────────────────────────────
+CRITICAL: 0   HIGH: 0   MEDIUM: 0   LOW: 0
+Sidecars:
+  ✓ python-ast: 3 findings (15 files, 1.2s)
+  ⏭ go-ast: skipped (No Go files detected)
+  ⏭ js-ast: skipped (No JavaScript/TypeScript files detected)
+Status: ✅ Passed
+────────────────────────────────────────
+```
 
 ---
 
@@ -254,7 +294,17 @@ jq -r '.content_hash' result.json
 - Access external networks (except GitHub API)
 - Store or transmit source code
 - Use AI/ML for detection (deterministic rules only)
-- Modify repository contents
+- **Modify repository contents** - This is READ-ONLY
+
+### Safety Guarantee
+
+**This action is a FILTER, not a FIXER.** It:
+- ✅ Reads your code to find issues
+- ✅ Reports what it finds
+- ❌ Never changes, deletes, or modifies any files
+- ❌ Never commits anything to your repository
+
+**If you make a mistake in the workflow file**, the worst that happens is the scan doesn't run. Your code remains completely untouched.
 
 ### Permissions Required
 
